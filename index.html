@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>消失在视线中的1700万人</title>
+    <style>
+        /* 全局重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #050505;
+            font-family: -apple-system, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 500px;
+            margin: 0 auto;
+            background: #000;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+        .scene {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+            background: #000;
+            z-index: 1;
+            padding: 24px;
+        }
+        .scene.active {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        .bg-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0.35; 
+            z-index: 0;
+            pointer-events: none;
+            filter: grayscale(20%) blur(1px);
+        }
+        
+        /* 开屏标题设计 */
+        .splash-title {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            color: #fff4df;
+            font-size: 2.2rem;
+            font-weight: 700;
+            text-shadow: 0 0 15px rgba(255, 174, 0, 0.4);
+            line-height: 1.4;
+            text-align: center;
+            z-index: 2;
+            margin-bottom: 24px;
+            letter-spacing: 2px;
+        }
+        .splash-title span {
+            display: inline-block;
+            transition: all 0.1s ease;
+            will-change: transform, opacity;
+        }
+        
+        /* 沙粒消散动效 */
+        @keyframes sandDissolve {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1) rotate(0deg);
+                filter: blur(0px);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(var(--rot));
+                filter: blur(6px);
+            }
+        }
+        .splash-title .dissolve {
+            animation: sandDissolve 1.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        /* 情感沉浸卡片 */
+        .story-card {
+            width: 100%;
+            max-width: 400px;
+            max-height: 55vh;
+            background: rgba(15, 15, 15, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 28px 24px;
+            color: #e5e5ea;
+            text-align: left;
+            z-index: 2;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 205, 0, 0.1);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .typing-area {
+            width: 100%;
+        }
+        .typing-line {
+            animation: fadeSlideUp 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            margin-bottom: 14px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            letter-spacing: 0.03em;
+        }
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .highlight-number {
+            color: #ffcc00;
+            font-weight: 600;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
+            margin: 0 2px;
+        }
+        
+        /* 按钮重构 */
+        button {
+            background: #ffffff;
+            border: none;
+            padding: 14px 44px;
+            border-radius: 50px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #000000;
+            margin-top: 24px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 5;
+            touch-action: manipulation;
+            letter-spacing: 1px;
+            box-shadow: 0 8px 20px rgba(255,255,255,0.1);
+        }
+        button:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.85);
+        }
+        .pulse-btn {
+            animation: btnPulse 2s infinite ease-in-out;
+        }
+        @keyframes btnPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(255,204,0,0.1); }
+            50% { transform: scale(1.03); box-shadow: 0 12px 24px rgba(255,204,0,0.3); }
+        }
+        
+        /* 游戏运行主UI */
+        .game-ui {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 40px 0 calc(30px + env(safe-area-inset-bottom)) 0;
+        }
+        .top-hint {
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            z-index: 5;
+            text-align: center;
+            padding: 0 20px;
+            line-height: 1.4;
+            font-weight: 500;
+        }
+        
+        /* 盲道3D系统 */
+        .blindway-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            perspective: 150px;
+        }
+        .blindway-bar {
+            width: 90px;
+            height: 0%;
+            background: repeating-linear-gradient(90deg, #ffcd00 0px, #ffcd00 12px, #000 12px, #000 24px);
+            transform-origin: bottom center;
+            transform: rotateX(25deg);
+            transition: height 0.12s cubic-bezier(0.15, 0.85, 0.35, 1);
+            box-shadow: 0 0 25px rgba(255, 205, 0, 0.25);
+            will-change: height;
+        }
+        .blindway-bar.warning-texture {
+            background: radial-gradient(#ffcd00 35%, transparent 40%) 0 0/16px 16px, #000;
+            box-shadow: 0 0 35px rgba(227, 77, 77, 0.4);
+        }
+        
+        /* 底部操作交互区 */
+        .touch-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            z-index: 15;
+            padding: 0 20px;
+        }
+        .touch-zones {
+            width: 100%;
+            display: flex;
+            gap: 16px;
+        }
+        .touch-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            text-align: center;
+            padding: 20px 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.6);
+            transition: all 0.1s ease;
+            touch-action: manipulation;
+        }
+        .touch-btn:active {
+            background: rgba(255, 204, 0, 0.15);
+            border-color: rgba(255, 204, 0, 0.4);
+            color: #ffcc00;
+            transform: scale(0.97);
+        }
+        
+        /* 中部浮动通知 */
+        .popup-msg-container {
+            position: absolute;
+            top: 25%;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0 24px;
+            z-index: 25;
+            pointer-events: none;
+        }
+        .popup-msg {
+            width: 100%;
+            max-width: 380px;
+            background: rgba(15, 15, 15, 0.95);
+            border-left: 4px solid #e34d4d;
+            border-radius: 16px;
+            padding: 20px;
+            color: #fff;
+            font-size: 0.9rem;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            text-align: left;
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            white-space: pre-wrap;
+            line-height: 1.6;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .relax-popup {
+            border-left-color: #34c759;
+        }
+        .hidden { 
+            opacity: 0; 
+            transform: translateY(15px);
+            display: none !important;
+        }
+        
+        /* 全屏红闪特效 */
+        .red-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(227, 77, 77, 0.2);
+            pointer-events: none;
+            z-index: 30;
+            animation: flashFade 0.3s ease-out forwards;
+        }
+        @keyframes flashFade {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,204,0,0.3) 0%, rgba(255,204,0,0) 70%);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            animation: rippleAnim 0.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+            z-index: 20;
+        }
+        @keyframes rippleAnim {
+            0% { width: 0px; height: 0px; opacity: 1; }
+            100% { width: 120px; height: 120px; opacity: 0; }
+        }
+        .warm-glow {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, rgba(52, 199, 89, 0.08) 0%, rgba(0,0,0,0) 75%);
+            pointer-events: none;
+            animation: gentlePulse 2s infinite alternate;
+            z-index: 2;
+        }
+        @keyframes gentlePulse {
+            from { opacity: 0.3; }
+            to { opacity: 0.8; }
+        }
+        .wall-crack {
+            position: absolute;
+            top: 40%;
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #ff3b30;
+            text-shadow: 0 0 15px rgba(255,59,48,0.6);
+            animation: shakeWall 0.2s infinite;
+            z-index: 35;
+            pointer-events: none;
+            letter-spacing: 2px;
+        }
+        @keyframes shakeWall {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(3px); }
+            75% { transform: translateX(-3px); }
+        }
+    </style>
+</head>
+<body>
+<div id="game-container"></div>
+
+<script>
+    // ===================================================================
+    // 背景图片路径
+    // ===================================================================
+    const BACKGROUND_IMAGE_URL = "背景图片.jpg"; 
+    // ===================================================================
+
+    // ---------- 声音纯合成引擎 ----------
+    let audioCtx = null;
+    let allowAudio = false;
+    let bgmGain = null;
+    let isBgmPlaying = false;
+    let bgmInterval = null;
+
+    function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        bgmGain = audioCtx.createGain();
+        bgmGain.connect(audioCtx.destination);
+        bgmGain.gain.value = 0.45;
+    }
+
+    function playTap() {
+        if (!allowAudio || !audioCtx) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 1200;
+        gain.gain.value = 0.15;
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+    }
+
+    function playMetal() {
+        if (!allowAudio) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'triangle'; osc.frequency.value = 580;
+        gain.gain.value = 0.35; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.start(now); osc.stop(now + 0.5);
+    }
+
+    function playStone() {
+        if (!allowAudio) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'sawtooth'; osc.frequency.value = 115;
+        gain.gain.value = 0.4; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.start(now); osc.stop(now + 0.5);
+    }
+
+    function playPlastic() {
+        if (!allowAudio) return;
+        const now = audioCtx.currentTime;
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i=0; i<buffer.length; i++) data[i] = (Math.random() - 0.5) * 0.5;
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass'; filter.frequency.value = 1000;
+        const gain = audioCtx.createGain();
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.value = 0.3; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        noise.start(now); noise.stop(now + 0.3);
+    }
+
+    function playWood() {
+        if (!allowAudio) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'square'; osc.frequency.value = 190;
+        gain.gain.value = 0.3; gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.start(now); osc.stop(now + 0.4);
+    }
+
+    function playWallBoom() {
+        if (!allowAudio) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = 60;
+        gain.gain.value = 0.6; gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+        osc.start(now); osc.stop(now + 1.0);
+    }
+
+    let envNoiseNode = null, envInterval = null;
+    function startEnvironmentSound() {
+        if (!allowAudio || !audioCtx) return;
+        const bufferSize = audioCtx.sampleRate * 1.0;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i=0; i<bufferSize; i++) data[i] = (Math.random() - 0.5) * 0.4;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer; noise.loop = true;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.value = 500;
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.1;
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.start();
+        envNoiseNode = noise;
+        envInterval = setInterval(() => {
+            if (!allowAudio) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.frequency.value = 1500 + Math.random() * 400;
+            g.gain.value = 0.02; g.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        }, 600);
+    }
+
+    function stopEnvironmentSound() { 
+        if (envNoiseNode) { try { envNoiseNode.stop(); } catch(e){} envNoiseNode = null; } 
+        if (envInterval) { clearInterval(envInterval); envInterval = null; } 
+    }
+
+    let beepInterval = null;
+    function startCrossBeep() { 
+        if (!allowAudio) return; 
+        if (beepInterval) clearInterval(beepInterval); 
+        beepInterval = setInterval(() => { 
+            if (!allowAudio || !audioCtx) return; 
+            const now = audioCtx.currentTime; 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.frequency.value = 800; gain.gain.value = 0.15; 
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2); 
+            osc.start(now); osc.stop(now + 0.2); 
+        }, 500); 
+    }
+    function stopCrossBeep() { if (beepInterval) clearInterval(beepInterval); beepInterval = null; }
+
+    function playScooter() { 
+        if (!allowAudio || !audioCtx) return; 
+        const now = audioCtx.currentTime; 
+        const osc = audioCtx.createOscillator(); 
+        const gain = audioCtx.createGain(); 
+        osc.connect(gain); gain.connect(audioCtx.destination); 
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); 
+        osc.frequency.exponentialRampToValueAtTime(280, now + 0.8); 
+        gain.gain.setValueAtTime(0.0, now); 
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.4); 
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0); 
+        osc.start(now); osc.stop(now + 1.0); 
+    }
+
+    let heartbeatInterval = null;
+    function startHeartbeat() { 
+        if (!allowAudio) return; 
+        if (heartbeatInterval) clearInterval(heartbeatInterval); 
+        heartbeatInterval = setInterval(() => { 
+            if (!allowAudio || !audioCtx) return; 
+            const now = audioCtx.currentTime; 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.frequency.value = 65; gain.gain.value = 0.25; 
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2); 
+            osc.start(now); osc.stop(now + 0.2); 
+        }, 400); 
+    }
+    function stopHeartbeat() { if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; } }
+
+    function startRelaxBGM() { 
+        if (!allowAudio || !audioCtx || isBgmPlaying) return; 
+        isBgmPlaying = true; 
+        function play() { 
+            if (!isBgmPlaying || !allowAudio) return; 
+            const now = audioCtx.currentTime; 
+            [261.63, 329.63, 392.00].forEach((f, idx) => { 
+                const osc = audioCtx.createOscillator(); const g = audioCtx.createGain(); 
+                osc.connect(g); g.connect(bgmGain); osc.frequency.value = f; 
+                g.gain.value = 0.08; g.gain.exponentialRampToValueAtTime(0.0001, now + 2.5); 
+                osc.start(now + idx * 0.1); osc.stop(now + 2.6); 
+            }); 
+        } 
+        play(); bgmInterval = setInterval(play, 4000); 
+    }
+    function startBGM() { 
+        if (!allowAudio || !audioCtx || isBgmPlaying) return; 
+        isBgmPlaying = true; 
+        function play() { 
+            if (!isBgmPlaying || !allowAudio) return; 
+            const now = audioCtx.currentTime; 
+            [293.66, 349.23, 440.0].forEach((f, idx) => { 
+                const osc = audioCtx.createOscillator(); const g = audioCtx.createGain(); 
+                osc.connect(g); g.connect(bgmGain); osc.frequency.value = f; 
+                g.gain.value = 0.09; g.gain.exponentialRampToValueAtTime(0.0001, now + 2.0); 
+                osc.start(now + idx * 0.1); osc.stop(now + 2.2); 
+            }); 
+        } 
+        play(); bgmInterval = setInterval(play, 4000); 
+    }
+    function stopBGM() { isBgmPlaying = false; if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; } }
+
+    function playUISound() { playTap(); }
+    
+    function vibrate(ms) { if(allowAudio && navigator.vibrate) navigator.vibrate(ms); }
+
+    // =========== 游戏状态与逻辑 ===========
+    let currentSceneId = 'splash';
+    let steps = 0, collisionCount = 0, hasCrossed = false, relaxSteps = 0, gameActive = true;
+    let obstacleMap = {};
+    const obstacleSteps = [3, 6, 9, 12];
+    const obstacles = [
+        { text: '你撞上了一辆横停在盲道上的共享单车。\n小腿被金属车架磕得生疼。', sound: playMetal },
+        { text: '盲杖敲到了一个冰冷的石墩。\n你的手指被震得发麻。', sound: playStone },
+        { text: '你踢翻了一堆堆在盲道上的装修废料。\n差点被绊倒。', sound: playPlastic },
+        { text: '盲杖直接戳上了一根电线杆。\n它为什么立在盲道正中间？', sound: playWood }
+    ];
+    let wallTriggered = false;
+    let relaxTextShown = false;
+
+    function showScene(id) {
+        document.querySelectorAll('.scene').forEach(sc => sc.classList.remove('active'));
+        const target = document.getElementById(`scene-${id}`);
+        if (target) target.classList.add('active');
+        currentSceneId = id;
+        if(id === 'game') gameActive = true;
+        if(id === 'end') { stopCrossBeep(); stopHeartbeat(); stopEnvironmentSound(); stopBGM(); }
+    }
+
+    function addRipple(x, y) {
+        const ripple = document.createElement('div');
+        ripple.className = 'ripple';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        document.getElementById('game-container').appendChild(ripple);
+        setTimeout(() => ripple.remove(), 500);
+    }
+    
+    function redFlash() {
+        const flash = document.createElement('div');
+        flash.className = 'red-flash';
+        document.body.appendChild(flash);
+        setTimeout(() => flash.remove(), 300);
+    }
+
+    function typeLines(containerId, lines, onComplete, baseDelay = 400) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.innerHTML = '';
+        let idx = 0;
+        
+        function add() {
+            if (idx >= lines.length) { if(onComplete) onComplete(); return; }
+            let line = lines[idx];
+            line = line.replace(/(\d+(\.\d+)?%?|\d+万)/g, match => `<span class="highlight-number">${match}</span>`);
+            const p = document.createElement('p');
+            p.className = 'typing-line';
+            p.innerHTML = line;
+            el.appendChild(p);
+            el.scrollTop = el.scrollHeight;
+
+            let dynamicDelay = baseDelay;
+            if (line.includes('——') || line.includes('车祸')) dynamicDelay = baseDelay * 2.2;
+            if (line.includes('墙') || line.includes('死路')) dynamicDelay = baseDelay * 1.8;
+
+            idx++;
+            setTimeout(add, dynamicDelay);
+        }
+        add();
+    }
+
+    function handleWalk(e) {
+        e.preventDefault();
+        if (!gameActive || currentSceneId !== 'game') return;
+        playTap();
+        vibrate(20);
+        
+        const rect = e.currentTarget?.getBoundingClientRect();
+        if (rect) addRipple(rect.left + rect.width/2, rect.top + rect.height/2);
+        
+        const bar = document.getElementById('blindBar');
+        let curHeight = parseFloat(bar.style.height) || 0;
+        let newHeight = Math.min(85, curHeight + 2.0);
+        bar.style.height = newHeight + "%";
+
+        if (!hasCrossed) {
+            steps++;
+            if (obstacleSteps.includes(steps) && !obstacleMap[steps]) {
+                obstacleMap[steps] = true;
+                const obs = obstacles[collisionCount % obstacles.length];
+                collisionCount++;
+                
+                bar.classList.add('warning-texture');
+
+                const pop = document.getElementById('popupMsg');
+                pop.innerHTML = obs.text;
+                pop.parentNode.classList.remove('hidden');
+                obs.sound();
+                vibrate(400);
+                redFlash();
+                
+                const isLast = (collisionCount >= obstacleSteps.length);
+                setTimeout(() => {
+                    pop.parentNode.classList.add('hidden');
+                    bar.classList.remove('warning-texture');
+                    if (isLast) {
+                        gameActive = false; stopBGM();
+                        showScene('crossing');
+                        startCrossingScene();
+                    }
+                }, isLast ? 2600 : 1800);
+            }
+        } else {
+            relaxSteps++;
+            if (!relaxTextShown && relaxSteps === 1) {
+                relaxTextShown = true;
+                const pop = document.getElementById('popupMsg');
+                pop.className = 'popup-msg relax-popup';
+                pop.innerHTML = '你继续往前走。\n\n这一路，似乎比之前顺利了很多。\n没有突然撞到共享单车的声音。\n盲杖敲在地面上，发出规律而单一的“嗒、嗒”声。\n你的心跳慢慢平复下来。\n\n“也许……这一趟也没那么可怕了。”\n你心情终于放松了下来。';
+                pop.parentNode.classList.remove('hidden');
+                
+                startRelaxBGM();
+                const warmDiv = document.createElement('div');
+                warmDiv.className = 'warm-glow';
+                document.querySelector('#scene-game .game-ui')?.appendChild(warmDiv);
+                
+                setTimeout(() => {
+                    pop.parentNode.classList.add('hidden');
+                    pop.className = 'popup-msg';
+                    warmDiv.remove();
+                }, 5000);
+            }
+            
+            if (relaxSteps >= 18 && !wallTriggered) {
+                wallTriggered = true;
+                gameActive = false;
+                bar.classList.add('warning-texture');
+                
+                playTap();
+                setTimeout(() => {
+                    if (!allowAudio) return;
+                    playStone();
+                    const pop = document.getElementById('popupMsg');
+                    pop.className = 'popup-msg';
+                    pop.innerHTML = '“嗒——”\n\n声音不对。盲道的凸起纹路消失了。\n盲道在这里，毫无预兆地中断了。\n你心里一惊，不敢再往前走。\n\n你小心翼翼地将盲杖向前移动去探索——';
+                    pop.parentNode.classList.remove('hidden');
+                }, 200);
+                
+                setTimeout(() => {
+                    playWallBoom();
+                    vibrate(600);
+                    const pop = document.getElementById('popupMsg');
+                    pop.innerHTML += '\n\n“咚。”\n\n盲杖敲在了一个坚硬平面上。是墙。\n一堵墙，结结实实地堵在了盲道的前方。\n——你无路可走了。';
+                    
+                    const wallDiv = document.createElement('div');
+                    wallDiv.className = 'wall-crack';
+                    wallDiv.innerHTML = '💥 盲道盲区 💥';
+                    document.querySelector('#scene-game .game-ui')?.appendChild(wallDiv);
+                    
+                    setTimeout(() => {
+                        wallDiv.remove();
+                        pop.parentNode.classList.add('hidden');
+                        bar.classList.remove('warning-texture');
+                        showScene('end');
+                        typeLines('end-story', endTexts, null, 450);
+                        document.getElementById('restartBtn').classList.add('pulse-btn');
+                    }, 3500);
+                }, 2200);
+            }
+        }
+    }
+
+    function startCrossingScene() {
+        const nextBtn = document.getElementById('crossingNextBtn');
+        nextBtn.style.display = 'none';
+        typeLines('crossing-story', crossingTexts, null, 400);
+        
+        if (!allowAudio) { allowAudio=true; initAudio(); audioCtx.resume(); }
+        startCrossBeep();
+        
+        setTimeout(() => { startEnvironmentSound(); }, 2500);
+        setTimeout(() => { playScooter(); startHeartbeat(); }, 5000);
+        setTimeout(() => {
+            stopHeartbeat(); stopEnvironmentSound(); stopCrossBeep();
+            nextBtn.style.display = 'block';
+            startRelaxBGM();
+        }, 11000);
+    }
+
+    function resetGame() {
+        steps = 0; collisionCount = 0; hasCrossed = false; relaxSteps = 0; gameActive = true; wallTriggered = false; obstacleMap = {}; relaxTextShown = false;
+        const bar = document.getElementById('blindBar');
+        if(bar) { bar.style.height = "0%"; bar.className = 'blindway-bar'; }
+        stopCrossBeep(); stopHeartbeat(); stopEnvironmentSound(); stopBGM();
+        document.querySelectorAll('.warm-glow, .wall-crack').forEach(el => el.remove());
+        showScene('splash');
+        if(allowAudio) startBGM();
+    }
+
+    function buildGame() {
+        const container = document.getElementById('game-container');
+        const titleText = "消失在视线中的1700万人";
+        const titleHTML = titleText.split('').map(ch => `<span>${ch}</span>`).join('');
+
+        container.innerHTML = `
+            <div id="scene-splash" class="scene active">
+                <div class="bg-image" style="background-image: ${BACKGROUND_IMAGE_URL ? `url(${BACKGROUND_IMAGE_URL})` : 'none'};"></div>
+                <div style="display:flex; flex-direction:column; align-items:center; z-index:2; width:100%;">
+                    <div class="splash-title" id="splashTitle">${titleHTML}</div>
+                    <p style="color:rgba(255,204,0,0.5); font-size:0.85rem; margin-top:-10px; margin-bottom:30px; letter-spacing:2px;">新媒体互动信息叙事</p>
+                    <button id="startExpBtn" class="pulse-btn">开始体验</button>
+                </div>
+            </div>
+            <div id="scene-intro" class="scene">
+                <div class="bg-image" style="background-image: ${BACKGROUND_IMAGE_URL ? `url(${BACKGROUND_IMAGE_URL})` : 'none'};"></div>
+                <div class="story-card"><div id="intro-story" class="typing-area"></div></div>
+                <button id="introContinue" style="display:none;">继续</button>
+            </div>
+            <div id="scene-game" class="scene">
+                <div class="game-ui">
+                    <div class="top-hint">点击下方盲杖交互区，交替敲击探路前进</div>
+                    <div class="blindway-wrapper">
+                        <div id="blindBar" class="blindway-bar" style="height:0%;"></div>
+                    </div>
+                    <div class="touch-container">
+                        <div class="touch-zones">
+                            <div id="leftTap" class="touch-btn">左杖敲击</div>
+                            <div id="rightTap" class="touch-btn">右杖敲击</div>
+                        </div>
+                    </div>
+                    <div class="popup-msg-container hidden"><div id="popupMsg" class="popup-msg"></div></div>
+                </div>
+            </div>
+            <div id="scene-crossing" class="scene">
+                <div class="story-card"><div id="crossing-story" class="typing-area"></div></div>
+                <button id="crossingNextBtn" style="display:none;">向前迈步</button>
+            </div>
+            <div id="scene-end" class="scene">
+                <div class="story-card"><div id="end-story" class="typing-area"></div></div>
+                <button id="restartBtn">重新唤醒</button>
+            </div>
+        `;
+
+        const startBtn = document.getElementById('startExpBtn');
+        const titleEl = document.getElementById('splashTitle');
+        const charSpans = titleEl.querySelectorAll('span');
+
+        function triggerDissolve() {
+            startBtn.style.pointerEvents = 'none';
+            charSpans.forEach((span) => {
+                const tx = (50 + Math.random() * 70) * (Math.random() > 0.5 ? 1 : -1);
+                const ty = -(60 + Math.random() * 60);
+                const rot = (Math.random() - 0.5) * 260;
+                span.style.setProperty('--tx', tx + 'px');
+                span.style.setProperty('--ty', ty + 'px');
+                span.style.setProperty('--rot', rot + 'deg');
+                span.style.animationDelay = (Math.random() * 0.2) + 's';
+                span.classList.add('dissolve');
+            });
+            setTimeout(() => {
+                charSpans.forEach(span => span.className = '');
+                startBtn.style.pointerEvents = 'auto';
+                showScene('intro');
+                typeLines('intro-story', introLines, () => {
+                    document.getElementById('introContinue').style.display = 'block';
+                }, 400);
+            }, 1600);
+        }
+
+        const bindButton = (id, callback) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            const h = (e) => { e.preventDefault(); callback(e); };
+            btn.addEventListener('click', h);
+            btn.addEventListener('touchstart', h, { passive: false });
+        };
+
+        bindButton('startExpBtn', () => {
+            if (!allowAudio) { allowAudio = true; initAudio(); audioCtx.resume(); }
+            startBGM(); playUISound(); vibrate(20); triggerDissolve();
+        });
+        bindButton('introContinue', () => {
+            playUISound(); vibrate(20); showScene('game');
+        });
+        bindButton('crossingNextBtn', () => {
+            playUISound(); vibrate(20); hasCrossed = true; relaxSteps = 0; gameActive = true;
+            showScene('game');
+            const bar = document.getElementById('blindBar'); if(bar) bar.style.height = "0%";
+        });
+        bindButton('restartBtn', () => { playUISound(); vibrate(30); resetGame(); });
+
+        const left = document.getElementById('leftTap');
+        const right = document.getElementById('rightTap');
+        const tapHandler = (e) => { e.preventDefault(); handleWalk(e); };
+        left?.addEventListener('touchstart', tapHandler, { passive: false });
+        left?.addEventListener('click', tapHandler);
+        right?.addEventListener('touchstart', tapHandler, { passive: false });
+        right?.addEventListener('click', tapHandler);
+    }
+
+    const introLines = [
+        "中国有超过1700万视障人士。",
+        "相当于每80个人中，就有一个看不见这个世界。",
+        "但你几乎在街上见不到他们。",
+        "因为盲道被共享单车、石墩、杂物层层侵占。",
+        "超过70%的盲道处于“失效”状态。",
+        "暗箱操作下，社会的角落藏着太多身不由己。",
+        "而你——",
+        "一个月前，一场突如其来的车祸，让你的世界彻底陷入了纯黑。",
+        "这是你失明后，第一次独自出门。",
+        "你的盲杖，就是你唯一的眼睛。"
+    ];
+
+    const crossingTexts = [
+        "你走到了一个十字路口。",
+        "幸运的是，路口安装了盲人钟——当绿灯亮起时，它会发出急促的“嘟嘟嘟”声提示通行。",
+        "然而，全国盲人钟的普及率并不乐观。即使在部分一线城市，安装率也不足30%。",
+        "提示音传来了，但周围太吵了——公交车、行人的声音混在一起……你几乎听不清。",
+        "你握紧盲杖，手心出汗。试探性地迈出一步——",
+        "一辆电瓶车几乎贴着你的身前冲过去。车主丢下一句：“看不见还乱闯！”",
+        "你僵在原地，心率狂跳。",
+        "“你没事吧？”一个温和的声音从你右侧传来。",
+        "“我……我听不清那个嘟嘟声，不敢过。”",
+        "“别怕，现在是绿灯。来，我扶你。”",
+        "你在她的引领下，终于安全顺利地穿过了马路。",
+        "“谢谢你。”“不用谢。路上小心。”",
+        "她的脚步声渐渐远去。你深吸一口气，继续走吧。"
+    ];
+
+    // 【核心更新点】：精准替换了第一句文本
+    const endTexts = [
+        "你无路可走了，但这不是你的错。",
+        "中国县级以上城市盲道覆盖率已达95%，但超过70%的盲道处于“失效”状态。",
+        "盲道越失效，他们越不敢出门；他们越不出门，社会越看不见他们——这是一个无声的恶性循环。",
+        "中国有超过1700万视障人士。但他们，正被迫“消失”在视线中。",
+        "——",
+        "“盲道不是一道装饰线，而是一根伸向黑暗中的生命引路线。”",
+        "“当它被设计暴力和冷漠层层切断时，我们脚下的城市，每天都在拒绝这1700万人。”"
+    ];
+
+    buildGame();
+    const unlock = () => {
+        if(!allowAudio) { initAudio(); if(audioCtx) audioCtx.resume(); allowAudio = true; startBGM(); }
+        document.removeEventListener('touchstart', unlock);
+        document.removeEventListener('click', unlock);
+    };
+    document.addEventListener('touchstart', unlock);
+    document.addEventListener('click', unlock);
+</script>
+</body>
+</html>
